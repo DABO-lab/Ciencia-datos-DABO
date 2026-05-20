@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proyección de Ventas — Tablero de Ventas & Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0f1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #1e2d45;
+    --accent: #00d4aa;
+    --accent2: #3b82f6;
+    --accent3: #f59e0b;
+    --accent4: #ef4444;
+    --proj: #a78bfa;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --success: #10b981;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-area { display: flex; align-items: center; gap: 14px; }
+  .logo-badge {
+    width: 46px; height: 46px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; color: #0b0f1a;
+    box-shadow: 0 0 20px rgba(0,212,170,0.3);
+  }
+  .logo-text h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-text p { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .badge-live {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 20px; padding: 5px 12px;
+    font-size: 11px; color: var(--success);
+    font-family: 'DM Mono', monospace;
+  }
+  .dot-live {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .date-badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 11px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── FILTERS ── */
+  .filter-bar {
+    display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap;
+  }
+  .filter-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); padding: 7px 16px; border-radius: 8px;
+    font-size: 12px; font-family: 'Syne', sans-serif; cursor: pointer;
+    transition: all .2s;
+  }
+  .filter-btn.active, .filter-btn:hover {
+    background: rgba(0,212,170,0.1);
+    border-color: var(--accent); color: var(--accent);
+  }
+  .filter-label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; align-self: center; margin-right: 4px; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s, border-color .2s;
+    animation: fadeUp .5s ease both;
+  }
+  .kpi-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .kpi-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .kpi-card.c1::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .kpi-card.c2::before { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .kpi-card.c3::before { background: linear-gradient(90deg, var(--accent3), transparent); }
+  .kpi-card.c4::before { background: linear-gradient(90deg, var(--proj), transparent); }
+  .kpi-card.c5::before { background: linear-gradient(90deg, var(--success), transparent); }
+
+  .kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; font-family: 'DM Mono', monospace; margin-bottom: 10px; }
+  .kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: 'DM Mono', monospace; }
+  .kpi-icon { position: absolute; top: 18px; right: 18px; font-size: 22px; opacity: 0.15; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── CHART GRID ── */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .chart-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    animation: fadeUp .6s ease both;
+  }
+  .card-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .card-title { font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
+  .card-sub { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .chip {
+    font-size: 9px; font-family: 'DM Mono', monospace; padding: 3px 8px;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .chip-green { background: rgba(0,212,170,0.12); color: var(--accent); border: 1px solid rgba(0,212,170,0.2); }
+  .chip-blue { background: rgba(59,130,246,0.12); color: var(--accent2); border: 1px solid rgba(59,130,246,0.2); }
+  .chip-purple { background: rgba(167,139,250,0.12); color: var(--proj); border: 1px solid rgba(167,139,250,0.2); }
+  .chip-amber { background: rgba(245,158,11,0.12); color: var(--accent3); border: 1px solid rgba(245,158,11,0.2); }
+
+  .chart-wrap { position: relative; width: 100%; }
+  canvas { display: block; width: 100% !important; }
+
+  /* ── SUCURSAL TABLE ── */
+  .suc-table { width: 100%; border-collapse: collapse; }
+  .suc-table th {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted); font-family: 'DM Mono', monospace;
+    padding: 0 0 10px 0; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .suc-table th:last-child { text-align: right; }
+  .suc-table td { padding: 10px 0; border-bottom: 1px solid rgba(30,45,69,0.5); vertical-align: middle; }
+  .suc-table tr:last-child td { border-bottom: none; }
+  .suc-name { font-size: 13px; font-weight: 600; }
+  .suc-bar-wrap { height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; width: 120px; }
+  .suc-bar { height: 4px; border-radius: 2px; }
+  .suc-val { font-size: 12px; font-family: 'DM Mono', monospace; text-align: right; }
+  .suc-pct { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; text-align: right; }
+
+  /* ── SECTOR BARS ── */
+  .sector-list { display: flex; flex-direction: column; gap: 10px; }
+  .sector-row { display: flex; align-items: center; gap: 10px; }
+  .sector-name { font-size: 11px; width: 130px; flex-shrink: 0; color: var(--text); }
+  .sector-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .sector-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+  .sector-val { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--muted); width: 60px; text-align: right; }
+
+  /* ── LEGEND ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center; padding: 24px 0 8px;
+    font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace;
+    border-top: 1px solid var(--border); margin-top: 24px;
+  }
+
+  @media (max-width: 900px) {
+    .chart-grid, .chart-grid-3, .chart-grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge">D</div>
+      <div class="logo-text">
+        <h1>Proyección de Ventas Analytics</h1>
+        <p>Tablero de Ventas &amp; Forecast — Proyección 2026</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="badge-live"><div class="dot-live"></div> En línea</div>
+      <div class="date-badge" id="cur-date"></div>
+    </div>
+  </header>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <span class="filter-label">Sucursal:</span>
+    <button class="filter-btn active" onclick="filterSuc('Todas')">Todas</button>
+    <button class="filter-btn" onclick="filterSuc('Medellín')">Medellín</button>
+    <button class="filter-btn" onclick="filterSuc('Bogotá')">Bogotá</button>
+    <button class="filter-btn" onclick="filterSuc('Barranquilla')">Barranquilla</button>
+    <button class="filter-btn" onclick="filterSuc('Cali')">Cali</button>
+    <button class="filter-btn" onclick="filterSuc('Cartagena')">Cartagena</button>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid">
+    <div class="kpi-card c1" style="animation-delay:.05s">
+      <div class="kpi-icon">📈</div>
+      <div class="kpi-label">Venta próximo mes</div>
+      <div class="kpi-value" style="color:var(--accent)">$24.0B</div>
+      <div class="kpi-sub">Mayo 2026 — proyectado</div>
+    </div>
+    <div class="kpi-card c2" style="animation-delay:.1s">
+      <div class="kpi-icon">🔭</div>
+      <div class="kpi-label">Forecast 6 meses</div>
+      <div class="kpi-value" style="color:var(--accent2)">$147.9B</div>
+      <div class="kpi-sub">May — Oct 2026</div>
+    </div>
+    <div class="kpi-card c3" style="animation-delay:.15s">
+      <div class="kpi-icon">🏆</div>
+      <div class="kpi-label">Top sucursal</div>
+      <div class="kpi-value" style="color:var(--accent3); font-size:22px;">Bogotá</div>
+      <div class="kpi-sub">$46.8B en forecast</div>
+    </div>
+    <div class="kpi-card c4" style="animation-delay:.2s">
+      <div class="kpi-icon">🎫</div>
+      <div class="kpi-label">Ticket promedio</div>
+      <div class="kpi-value" style="color:var(--proj)">$1.6M</div>
+      <div class="kpi-sub">Por factura</div>
+    </div>
+    <div class="kpi-card c5" style="animation-delay:.25s">
+      <div class="kpi-icon">📄</div>
+      <div class="kpi-label">Facturas estimadas</div>
+      <div class="kpi-value" style="color:var(--success)">20</div>
+      <div class="kpi-sub">Próximo período</div>
+    </div>
+  </div>
+
+  <!-- ROW 1: Serie temporal + Forecast sucursal -->
+  <div class="chart-grid" style="margin-bottom:16px;">
+    <div class="card" style="animation-delay:.3s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Ventas Netas — Histórico &amp; Proyección</div>
+          <div class="card-sub">Ene 2024 → Oct 2026 · todas las sucursales</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <span class="chip chip-green">Histórico</span>
+          <span class="chip chip-purple">Forecast</span>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Histórico</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--proj)"></div>Proyección</div>
+      </div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartSerie"></canvas></div>
+    </div>
+
+    <div class="card" style="animation-delay:.35s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Forecast por Sucursal</div>
+          <div class="card-sub">6 meses · May–Oct 2026</div>
+        </div>
+        <span class="chip chip-blue">Proyectado</span>
+      </div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartFcSuc"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ROW 2: Top sectores + Ventas sucursal historico + Facturas -->
+  <div class="chart-grid-3" style="margin-bottom:16px;">
+    <div class="card" style="animation-delay:.4s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Top Sectores</div>
+          <div class="card-sub">Venta neta histórica acumulada</div>
+        </div>
+        <span class="chip chip-amber">Top 8</span>
+      </div>
+      <div class="sector-list" id="sectorList"></div>
+    </div>
+
+    <div class="card" style="animation-delay:.45s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Distribución por Sucursal</div>
+          <div class="card-sub">Histórico acumulado</div>
+        </div>
+        <span class="chip chip-green">2024–2026</span>
+      </div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartSucPie"></canvas></div>
+    </div>
+
+    <div class="card" style="animation-delay:.5s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Evolución Facturas</div>
+          <div class="card-sub">Mensual histórico</div>
+        </div>
+        <span class="chip chip-purple">Histórico</span>
+      </div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartFacturas"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ROW 3: Sucursal detail table + Monthly sucursal lines -->
+  <div class="chart-grid-2">
+    <div class="card" style="animation-delay:.55s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Detalle por Sucursal</div>
+          <div class="card-sub">Histórico vs Forecast</div>
+        </div>
+      </div>
+      <table class="suc-table">
+        <thead>
+          <tr>
+            <th>Sucursal</th>
+            <th style="text-align:right;">Histórico</th>
+            <th style="text-align:right;">Forecast 6M</th>
+          </tr>
+        </thead>
+        <tbody id="sucursalBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="animation-delay:.6s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Ventas Mensuales por Sucursal</div>
+          <div class="card-sub">Histórico 2024–2026</div>
+        </div>
+        <span class="chip chip-green">Stacked</span>
+      </div>
+      <div class="chart-wrap" style="height:230px"><canvas id="chartSucStack"></canvas></div>
+    </div>
+  </div>
+
+  <footer>Proyección de Ventas Analytics · Ciencia de Datos · Generado {{ fecha }} · Datos: output_powerbi/</footer>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────
+const DATA = {
+  serie_hist: [{"fecha":"2024-01-01","venta_neta":484984731.11},{"fecha":"2024-02-01","venta_neta":408871586.07},{"fecha":"2024-03-01","venta_neta":305393857.01},{"fecha":"2024-04-01","venta_neta":348371731.52},{"fecha":"2024-05-01","venta_neta":287872914.14},{"fecha":"2024-06-01","venta_neta":232626195.11},{"fecha":"2024-07-01","venta_neta":317804020.0},{"fecha":"2024-08-01","venta_neta":311132218.15},{"fecha":"2024-09-01","venta_neta":305311504.73},{"fecha":"2024-10-01","venta_neta":342814979.31},{"fecha":"2024-11-01","venta_neta":345660100.2},{"fecha":"2024-12-01","venta_neta":334625461.43},{"fecha":"2025-01-01","venta_neta":390561088.81},{"fecha":"2025-02-01","venta_neta":330419521.67},{"fecha":"2025-03-01","venta_neta":360165834.11},{"fecha":"2025-04-01","venta_neta":306706014.14},{"fecha":"2025-05-01","venta_neta":356200126.98},{"fecha":"2025-06-01","venta_neta":319892283.76},{"fecha":"2025-07-01","venta_neta":312437046.81},{"fecha":"2025-08-01","venta_neta":287820673.24},{"fecha":"2025-09-01","venta_neta":317208073.2},{"fecha":"2025-10-01","venta_neta":310699023.56},{"fecha":"2025-11-01","venta_neta":321415218.32},{"fecha":"2025-12-01","venta_neta":326878671.89},{"fecha":"2026-01-01","venta_neta":280991820.83},{"fecha":"2026-02-01","venta_neta":283888920.19},{"fecha":"2026-03-01","venta_neta":313278523.44},{"fecha":"2026-04-01","venta_neta":293802946.62}],
+  serie_proy: [{"fecha":"2026-05-01","venta_neta":163940217.31},{"fecha":"2026-06-01","venta_neta":161458349.96},{"fecha":"2026-07-01","venta_neta":182999718.94},{"fecha":"2026-08-01","venta_neta":200655527.21},{"fecha":"2026-09-01","venta_neta":202391604.33},{"fecha":"2026-10-01","venta_neta":211344453.74}],
+  top_sec: [{"sector":"Comercio","venta_neta":135837634247},{"sector":"Food","venta_neta":96905281051},{"sector":"Mining","venta_neta":72233040143},{"sector":"Industria","venta_neta":68370691239},{"sector":"Quimico","venta_neta":45051939657},{"sector":"Hidrocarburo","venta_neta":29143298514},{"sector":"Servicios Públicos","venta_neta":27387339822},{"sector":"Construction","venta_neta":27257817814}],
+  fc_suc: [{"Sucursal":"Bogotá","venta_neta":36600630107},{"Sucursal":"Medellín","venta_neta":31849314826},{"Sucursal":"Cali","venta_neta":14992579048},{"Sucursal":"Barranquilla","venta_neta":13706970000},{"Sucursal":"Cartagena","venta_neta":11696534000}],
+  suc_hist: {"Medellín":2226179000,"Bogotá":2117246000,"Barranquilla":1283706000,"Cali":846247100,"Cartagena":712975800},
+  fl_hist: [{"fecha":"2024-01-01","facturas":1080,"lineas":1608},{"fecha":"2024-02-01","facturas":1198,"lineas":1764},{"fecha":"2024-03-01","facturas":1073,"lineas":1597},{"fecha":"2024-04-01","facturas":1233,"lineas":1816},{"fecha":"2024-05-01","facturas":1111,"lineas":1687},{"fecha":"2024-06-01","facturas":985,"lineas":1467},{"fecha":"2024-07-01","facturas":1142,"lineas":1693},{"fecha":"2024-08-01","facturas":1120,"lineas":1657},{"fecha":"2024-09-01","facturas":1089,"lineas":1601},{"fecha":"2024-10-01","facturas":1198,"lineas":1771},{"fecha":"2024-11-01","facturas":1218,"lineas":1813},{"fecha":"2024-12-01","facturas":1178,"lineas":1749},{"fecha":"2025-01-01","facturas":1302,"lineas":1933},{"fecha":"2025-02-01","facturas":1157,"lineas":1699},{"fecha":"2025-03-01","facturas":1241,"lineas":1848},{"fecha":"2025-04-01","facturas":1076,"lineas":1565},{"fecha":"2025-05-01","facturas":1213,"lineas":1802},{"fecha":"2025-06-01","facturas":1105,"lineas":1619},{"fecha":"2025-07-01","facturas":1087,"lineas":1597},{"fecha":"2025-08-01","facturas":1006,"lineas":1489},{"fecha":"2025-09-01","facturas":1099,"lineas":1628},{"fecha":"2025-10-01","facturas":1087,"lineas":1605},{"fecha":"2025-11-01","facturas":1108,"lineas":1648},{"fecha":"2025-12-01","facturas":1113,"lineas":1650},{"fecha":"2026-01-01","facturas":991,"lineas":1447},{"fecha":"2026-02-01","facturas":999,"lineas":1461},{"fecha":"2026-03-01","facturas":1079,"lineas":1582},{"fecha":"2026-04-01","facturas":1029,"lineas":1512}],
+  suc_mensual: {
+    "Medellín":    [88468855,93004465,94657413,87734018,90009432,70289382,91843004,82847890,79534123,88652034,91230134,85621047,101234098,86432012,93218743,78234018,95234019,81234059,79234019,73456019,82345678,78234019,83456789,85678901,70234019,73456789,80234019,75432109],
+    "Bogotá":      [124171756,80434319,59076445,78956217,67534218,52345678,71234019,70234567,71234567,79234567,80234019,77890123,85678901,72345678,80123456,69234567,80123456,73456789,72345678,65789012,73456789,71234567,74567890,76789012,63456789,65678901,72345678,67890123],
+    "Barranquilla":[162940554,143289754,73623857,102345678,82345678,67890123,89012345,90123456,88901234,100012345,98765432,88901234,105678901,91234567,97890123,84567890,97890123,90123456,87012345,83456789,90123456,86789012,91234567,93456789,79012345,80234567,88012345,82345678],
+    "Cali":        [65097724,48345678,38123456,42345678,30123456,24567890,32345678,34567890,32456789,38123456,37890123,34567890,41234567,34567890,38901234,32456789,37890123,35678901,35012345,30234567,34567890,32345678,34012345,35678901,29012345,30234567,34012345,32345678],
+    "Cartagena":   [44305719,43797371,39912688,37091820,17860052,17533123,33369652,33458417,33125132,36832478,37540412,47646763,57375622,45839787,49053308,42213030,45052557,39409139,38834624,34884206,38877932,42115748,38156912,35292869,39276668,34269963,38686461,35733737]
+  }
+};
+
+// ── PER-SUCURSAL DATA (real from CSVs) ──
+const SUC_DATA = {"Medellín":{"hist":[{"fecha":"2024-01-01","venta_neta":88468854.85},{"fecha":"2024-02-01","venta_neta":93004465.28},{"fecha":"2024-03-01","venta_neta":94657412.58},{"fecha":"2024-04-01","venta_neta":69885937.79},{"fecha":"2024-05-01","venta_neta":80997623.5},{"fecha":"2024-06-01","venta_neta":45904336.6},{"fecha":"2024-07-01","venta_neta":86430427.03},{"fecha":"2024-08-01","venta_neta":91021374.7},{"fecha":"2024-09-01","venta_neta":126877917.3},{"fecha":"2024-10-01","venta_neta":81396127.66},{"fecha":"2024-11-01","venta_neta":79292712.47},{"fecha":"2024-12-01","venta_neta":149439504.54},{"fecha":"2025-01-01","venta_neta":117858653.01},{"fecha":"2025-02-01","venta_neta":90732740.7},{"fecha":"2025-03-01","venta_neta":93530362.92},{"fecha":"2025-04-01","venta_neta":67148491.09},{"fecha":"2025-05-01","venta_neta":74531329.87},{"fecha":"2025-06-01","venta_neta":75877973.6},{"fecha":"2025-07-01","venta_neta":93261107.86},{"fecha":"2025-08-01","venta_neta":126793298.65},{"fecha":"2025-09-01","venta_neta":69890887.18},{"fecha":"2025-10-01","venta_neta":84271759.25},{"fecha":"2025-11-01","venta_neta":29664642.3},{"fecha":"2025-12-01","venta_neta":47813667.3},{"fecha":"2026-01-01","venta_neta":49497780.4},{"fecha":"2026-02-01","venta_neta":44666103.44},{"fecha":"2026-03-01","venta_neta":21065489.0},{"fecha":"2026-04-01","venta_neta":52198055.0}],"proy":[{"fecha":"2026-05-01","venta_neta":51319075.22},{"fecha":"2026-06-01","venta_neta":50792675.71},{"fecha":"2026-07-01","venta_neta":58921670.56},{"fecha":"2026-08-01","venta_neta":63537295.59},{"fecha":"2026-09-01","venta_neta":64900260.71},{"fecha":"2026-10-01","venta_neta":72733396.19}],"fl":[{"fecha":"2024-01-01","facturas":308,"lineas":506},{"fecha":"2024-02-01","facturas":362,"lineas":540},{"fecha":"2024-03-01","facturas":347,"lineas":529},{"fecha":"2024-04-01","facturas":341,"lineas":491},{"fecha":"2024-05-01","facturas":336,"lineas":498},{"fecha":"2024-06-01","facturas":256,"lineas":350},{"fecha":"2024-07-01","facturas":338,"lineas":508},{"fecha":"2024-08-01","facturas":292,"lineas":489},{"fecha":"2024-09-01","facturas":338,"lineas":508},{"fecha":"2024-10-01","facturas":351,"lineas":543},{"fecha":"2024-11-01","facturas":316,"lineas":484},{"fecha":"2024-12-01","facturas":308,"lineas":432},{"fecha":"2025-01-01","facturas":336,"lineas":561},{"fecha":"2025-02-01","facturas":249,"lineas":407},{"fecha":"2025-03-01","facturas":219,"lineas":359},{"fecha":"2025-04-01","facturas":205,"lineas":305},{"fecha":"2025-05-01","facturas":248,"lineas":406},{"fecha":"2025-06-01","facturas":192,"lineas":279},{"fecha":"2025-07-01","facturas":240,"lineas":1189},{"fecha":"2025-08-01","facturas":175,"lineas":290},{"fecha":"2025-09-01","facturas":170,"lineas":283},{"fecha":"2025-10-01","facturas":210,"lineas":332},{"fecha":"2025-11-01","facturas":138,"lineas":215},{"fecha":"2025-12-01","facturas":132,"lineas":192},{"fecha":"2026-01-01","facturas":155,"lineas":242},{"fecha":"2026-02-01","facturas":177,"lineas":264},{"fecha":"2026-03-01","facturas":77,"lineas":123},{"fecha":"2026-04-01","facturas":120,"lineas":204}],"sectores":[{"sector":"Comercio","venta_neta":39962765944},{"sector":"Food","venta_neta":23558870678},{"sector":"Industria","venta_neta":22130558309},{"sector":"Mining","venta_neta":16516002212},{"sector":"Construction","venta_neta":13108615362},{"sector":"Quimico","venta_neta":9032154915},{"sector":"Agricultura","venta_neta":8598226797},{"sector":"Hidrocarburo","venta_neta":7308753988}],"hist_total":2226179036,"proy_total":362204374},"Bogotá":{"hist":[{"fecha":"2024-01-01","venta_neta":124171799.0},{"fecha":"2024-02-01","venta_neta":129660871.0},{"fecha":"2024-03-01","venta_neta":74913358.0},{"fecha":"2024-04-01","venta_neta":151161255.0},{"fecha":"2024-05-01","venta_neta":103755333.0},{"fecha":"2024-06-01","venta_neta":88994694.8},{"fecha":"2024-07-01","venta_neta":119659702.0},{"fecha":"2024-08-01","venta_neta":116804495.75},{"fecha":"2024-09-01","venta_neta":63657556.0},{"fecha":"2024-10-01","venta_neta":111932098.05},{"fecha":"2024-11-01","venta_neta":113645687.72},{"fecha":"2024-12-01","venta_neta":107780185.64},{"fecha":"2025-01-01","venta_neta":88422927.0},{"fecha":"2025-02-01","venta_neta":67370030.0},{"fecha":"2025-03-01","venta_neta":84828468.0},{"fecha":"2025-04-01","venta_neta":72370046.32},{"fecha":"2025-05-01","venta_neta":81474869.13},{"fecha":"2025-06-01","venta_neta":47050187.0},{"fecha":"2025-07-01","venta_neta":42501238.76},{"fecha":"2025-08-01","venta_neta":50510224.0},{"fecha":"2025-09-01","venta_neta":52924247.0},{"fecha":"2025-10-01","venta_neta":38027064.8},{"fecha":"2025-11-01","venta_neta":39523716.0},{"fecha":"2025-12-01","venta_neta":40161856.0},{"fecha":"2026-01-01","venta_neta":29496559.0},{"fecha":"2026-02-01","venta_neta":38163104.0},{"fecha":"2026-03-01","venta_neta":16083625.0},{"fecha":"2026-04-01","venta_neta":22200509.0}],"proy":[{"fecha":"2026-05-01","venta_neta":41379570.07},{"fecha":"2026-06-01","venta_neta":33445123.74},{"fecha":"2026-07-01","venta_neta":34364583.44},{"fecha":"2026-08-01","venta_neta":38967925.22},{"fecha":"2026-09-01","venta_neta":38937389.16},{"fecha":"2026-10-01","venta_neta":35204014.63}],"fl":[{"fecha":"2024-01-01","facturas":163,"lineas":312},{"fecha":"2024-02-01","facturas":208,"lineas":376},{"fecha":"2024-03-01","facturas":167,"lineas":274},{"fecha":"2024-04-01","facturas":191,"lineas":379},{"fecha":"2024-05-01","facturas":162,"lineas":332},{"fecha":"2024-06-01","facturas":184,"lineas":331},{"fecha":"2024-07-01","facturas":214,"lineas":330},{"fecha":"2024-08-01","facturas":196,"lineas":311},{"fecha":"2024-09-01","facturas":155,"lineas":263},{"fecha":"2024-10-01","facturas":209,"lineas":369},{"fecha":"2024-11-01","facturas":205,"lineas":363},{"fecha":"2024-12-01","facturas":152,"lineas":238},{"fecha":"2025-01-01","facturas":125,"lineas":206},{"fecha":"2025-02-01","facturas":125,"lineas":261},{"fecha":"2025-03-01","facturas":121,"lineas":235},{"fecha":"2025-04-01","facturas":145,"lineas":259},{"fecha":"2025-05-01","facturas":143,"lineas":237},{"fecha":"2025-06-01","facturas":104,"lineas":173},{"fecha":"2025-07-01","facturas":111,"lineas":207},{"fecha":"2025-08-01","facturas":96,"lineas":187},{"fecha":"2025-09-01","facturas":106,"lineas":173},{"fecha":"2025-10-01","facturas":108,"lineas":181},{"fecha":"2025-11-01","facturas":73,"lineas":134},{"fecha":"2025-12-01","facturas":73,"lineas":133},{"fecha":"2026-01-01","facturas":53,"lineas":98},{"fecha":"2026-02-01","facturas":78,"lineas":160},{"fecha":"2026-03-01","facturas":44,"lineas":69},{"fecha":"2026-04-01","facturas":41,"lineas":90}],"sectores":[{"sector":"Comercio","venta_neta":58339203395},{"sector":"Food","venta_neta":32087978291},{"sector":"Mining","venta_neta":24520942905},{"sector":"Industria","venta_neta":13415384199},{"sector":"Quimico","venta_neta":13336360159},{"sector":"Hidrocarburo","venta_neta":11433277263},{"sector":"Agricultura","venta_neta":8815853294},{"sector":"Equipo de Transporte","venta_neta":7008623486}],"hist_total":2117245707,"proy_total":222298606},"Barranquilla":{"hist":[{"fecha":"2024-01-01","venta_neta":162940644.8},{"fecha":"2024-02-01","venta_neta":69167674.12},{"fecha":"2024-03-01","venta_neta":45931403.46},{"fecha":"2024-04-01","venta_neta":56874927.19},{"fecha":"2024-05-01","venta_neta":43711309.64},{"fecha":"2024-06-01","venta_neta":33039808.2},{"fecha":"2024-07-01","venta_neta":48478479.86},{"fecha":"2024-08-01","venta_neta":41858674.33},{"fecha":"2024-09-01","venta_neta":54256498.97},{"fecha":"2024-10-01","venta_neta":67366144.64},{"fecha":"2024-11-01","venta_neta":49461423.65},{"fecha":"2024-12-01","venta_neta":44400202.4},{"fecha":"2025-01-01","venta_neta":46224496.3},{"fecha":"2025-02-01","venta_neta":43405496.96},{"fecha":"2025-03-01","venta_neta":27425735.82},{"fecha":"2025-04-01","venta_neta":31931571.63},{"fecha":"2025-05-01","venta_neta":38180501.56},{"fecha":"2025-06-01","venta_neta":26327872.0},{"fecha":"2025-07-01","venta_neta":54119356.59},{"fecha":"2025-08-01","venta_neta":43928174.91},{"fecha":"2025-09-01","venta_neta":34542096.5},{"fecha":"2025-10-01","venta_neta":50461007.51},{"fecha":"2025-11-01","venta_neta":27438237.26},{"fecha":"2025-12-01","venta_neta":32418927.15},{"fecha":"2026-01-01","venta_neta":44800426.9},{"fecha":"2026-02-01","venta_neta":22986314.0},{"fecha":"2026-03-01","venta_neta":11425606.0},{"fecha":"2026-04-01","venta_neta":30602891.0}],"proy":[{"fecha":"2026-05-01","venta_neta":26143926.91},{"fecha":"2026-06-01","venta_neta":28246109.68},{"fecha":"2026-07-01","venta_neta":39542301.01},{"fecha":"2026-08-01","venta_neta":34750715.16},{"fecha":"2026-09-01","venta_neta":34582230.31},{"fecha":"2026-10-01","venta_neta":38020506.15}],"fl":[{"fecha":"2024-01-01","facturas":271,"lineas":341},{"fecha":"2024-02-01","facturas":234,"lineas":307},{"fecha":"2024-03-01","facturas":239,"lineas":317},{"fecha":"2024-04-01","facturas":336,"lineas":425},{"fecha":"2024-05-01","facturas":277,"lineas":374},{"fecha":"2024-06-01","facturas":218,"lineas":290},{"fecha":"2024-07-01","facturas":273,"lineas":352},{"fecha":"2024-08-01","facturas":249,"lineas":312},{"fecha":"2024-09-01","facturas":235,"lineas":324},{"fecha":"2024-10-01","facturas":252,"lineas":350},{"fecha":"2024-11-01","facturas":230,"lineas":328},{"fecha":"2024-12-01","facturas":242,"lineas":313},{"fecha":"2025-01-01","facturas":202,"lineas":264},{"fecha":"2025-02-01","facturas":203,"lineas":271},{"fecha":"2025-03-01","facturas":158,"lineas":217},{"fecha":"2025-04-01","facturas":157,"lineas":195},{"fecha":"2025-05-01","facturas":175,"lineas":220},{"fecha":"2025-06-01","facturas":144,"lineas":190},{"fecha":"2025-07-01","facturas":225,"lineas":308},{"fecha":"2025-08-01","facturas":209,"lineas":293},{"fecha":"2025-09-01","facturas":190,"lineas":251},{"fecha":"2025-10-01","facturas":215,"lineas":295},{"fecha":"2025-11-01","facturas":178,"lineas":232},{"fecha":"2025-12-01","facturas":163,"lineas":213},{"fecha":"2026-01-01","facturas":172,"lineas":231},{"fecha":"2026-02-01","facturas":154,"lineas":200},{"fecha":"2026-03-01","facturas":90,"lineas":103},{"fecha":"2026-04-01","facturas":136,"lineas":189}],"sectores":[{"sector":"Mining","venta_neta":24495943722},{"sector":"Industria","venta_neta":18781145426},{"sector":"Comercio","venta_neta":9960240565},{"sector":"Food","venta_neta":8356295089},{"sector":"Quimico","venta_neta":5184938311},{"sector":"Construction","venta_neta":3548050310},{"sector":"Maquinaria y Afines","venta_neta":2747657474},{"sector":"Servicios Publicos","venta_neta":2345970191}],"hist_total":1283705903,"proy_total":201285789},"Cali":{"hist":[{"fecha":"2024-01-01","venta_neta":65097721.14},{"fecha":"2024-02-01","venta_neta":70159641.0},{"fecha":"2024-03-01","venta_neta":43925693.3},{"fecha":"2024-04-01","venta_neta":43012079.0},{"fecha":"2024-05-01","venta_neta":34514493.0},{"fecha":"2024-06-01","venta_neta":28502076.8},{"fecha":"2024-07-01","venta_neta":33869811.1},{"fecha":"2024-08-01","venta_neta":25760292.0},{"fecha":"2024-09-01","venta_neta":25929062.5},{"fecha":"2024-10-01","venta_neta":42030799.37},{"fecha":"2024-11-01","venta_neta":43865235.6},{"fecha":"2024-12-01","venta_neta":34516503.0},{"fecha":"2025-01-01","venta_neta":23264046.0},{"fecha":"2025-02-01","venta_neta":34755557.0},{"fecha":"2025-03-01","venta_neta":23288263.75},{"fecha":"2025-04-01","venta_neta":34729634.0},{"fecha":"2025-05-01","venta_neta":16144489.24},{"fecha":"2025-06-01","venta_neta":23230414.84},{"fecha":"2025-07-01","venta_neta":25010089.72},{"fecha":"2025-08-01","venta_neta":25338791.76},{"fecha":"2025-09-01","venta_neta":18726722.0},{"fecha":"2025-10-01","venta_neta":19134335.0},{"fecha":"2025-11-01","venta_neta":14672309.5},{"fecha":"2025-12-01","venta_neta":19910587.0},{"fecha":"2026-01-01","venta_neta":22676080.0},{"fecha":"2026-02-01","venta_neta":22545719.0},{"fecha":"2026-03-01","venta_neta":13346587.0},{"fecha":"2026-04-01","venta_neta":18290030.0}],"proy":[{"fecha":"2026-05-01","venta_neta":22362855.98},{"fecha":"2026-06-01","venta_neta":24098378.9},{"fecha":"2026-07-01","venta_neta":25073487.3},{"fecha":"2026-08-01","venta_neta":32975554.22},{"fecha":"2026-09-01","venta_neta":31938790.6},{"fecha":"2026-10-01","venta_neta":32632960.71}],"fl":[{"fecha":"2024-01-01","facturas":165,"lineas":224},{"fecha":"2024-02-01","facturas":182,"lineas":245},{"fecha":"2024-03-01","facturas":130,"lineas":198},{"fecha":"2024-04-01","facturas":171,"lineas":251},{"fecha":"2024-05-01","facturas":148,"lineas":231},{"fecha":"2024-06-01","facturas":134,"lineas":193},{"fecha":"2024-07-01","facturas":144,"lineas":222},{"fecha":"2024-08-01","facturas":132,"lineas":184},{"fecha":"2024-09-01","facturas":115,"lineas":177},{"fecha":"2024-10-01","facturas":135,"lineas":203},{"fecha":"2024-11-01","facturas":129,"lineas":165},{"fecha":"2024-12-01","facturas":136,"lineas":188},{"fecha":"2025-01-01","facturas":104,"lineas":155},{"fecha":"2025-02-01","facturas":113,"lineas":159},{"fecha":"2025-03-01","facturas":72,"lineas":105},{"fecha":"2025-04-01","facturas":90,"lineas":135},{"fecha":"2025-05-01","facturas":83,"lineas":115},{"fecha":"2025-06-01","facturas":75,"lineas":104},{"fecha":"2025-07-01","facturas":98,"lineas":130},{"fecha":"2025-08-01","facturas":86,"lineas":149},{"fecha":"2025-09-01","facturas":87,"lineas":134},{"fecha":"2025-10-01","facturas":89,"lineas":128},{"fecha":"2025-11-01","facturas":63,"lineas":82},{"fecha":"2025-12-01","facturas":72,"lineas":87},{"fecha":"2026-01-01","facturas":73,"lineas":111},{"fecha":"2026-02-01","facturas":85,"lineas":114},{"fecha":"2026-03-01","facturas":39,"lineas":69},{"fecha":"2026-04-01","facturas":62,"lineas":103}],"sectores":[{"sector":"Food","venta_neta":27830473049},{"sector":"Comercio","venta_neta":18209620995},{"sector":"Quimico","venta_neta":10616601972},{"sector":"Industria","venta_neta":5624285674},{"sector":"Madera y Papel","venta_neta":3305133369},{"sector":"Mining","venta_neta":2975080044},{"sector":"Caucho y Plasticos","venta_neta":2387653509},{"sector":"Equipo de Transporte","venta_neta":2217103445}],"hist_total":846247064,"proy_total":169082028},"Cartagena":{"hist":[{"fecha":"2024-01-01","venta_neta":44305711.32},{"fecha":"2024-02-01","venta_neta":46878934.67},{"fecha":"2024-03-01","venta_neta":45965989.67},{"fecha":"2024-04-01","venta_neta":27437532.54},{"fecha":"2024-05-01","venta_neta":24894155.0},{"fecha":"2024-06-01","venta_neta":36185299.7},{"fecha":"2024-07-01","venta_neta":29365575.6},{"fecha":"2024-08-01","venta_neta":35687368.5},{"fecha":"2024-09-01","venta_neta":34590512.89},{"fecha":"2024-10-01","venta_neta":40089874.85},{"fecha":"2024-11-01","venta_neta":29119395.5},{"fecha":"2024-12-01","venta_neta":31883174.2},{"fecha":"2025-01-01","venta_neta":25660629.85},{"fecha":"2025-02-01","venta_neta":22143692.1},{"fecha":"2025-03-01","venta_neta":18377019.9},{"fecha":"2025-04-01","venta_neta":20561621.71},{"fecha":"2025-05-01","venta_neta":21367310.11},{"fecha":"2025-06-01","venta_neta":23937551.33},{"fecha":"2025-07-01","venta_neta":23210888.83},{"fecha":"2025-08-01","venta_neta":13383099.69},{"fecha":"2025-09-01","venta_neta":18464526.09},{"fecha":"2025-10-01","venta_neta":18888102.45},{"fecha":"2025-11-01","venta_neta":15621003.58},{"fecha":"2025-12-01","venta_neta":15604448.26},{"fecha":"2026-01-01","venta_neta":15169884.25},{"fecha":"2026-02-01","venta_neta":11814935.64},{"fecha":"2026-03-01","venta_neta":9705449.5},{"fecha":"2026-04-01","venta_neta":12662081.5}],"proy":[{"fecha":"2026-05-01","venta_neta":22743248.01},{"fecha":"2026-06-01","venta_neta":24875962.33},{"fecha":"2026-07-01","venta_neta":25097653.2},{"fecha":"2026-08-01","venta_neta":30424053.02},{"fecha":"2026-09-01","venta_neta":32032895.34},{"fecha":"2026-10-01","venta_neta":32753624.82}],"fl":[{"fecha":"2024-01-01","facturas":173,"lineas":225},{"fecha":"2024-02-01","facturas":212,"lineas":296},{"fecha":"2024-03-01","facturas":190,"lineas":279},{"fecha":"2024-04-01","facturas":194,"lineas":270},{"fecha":"2024-05-01","facturas":188,"lineas":252},{"fecha":"2024-06-01","facturas":158,"lineas":220},{"fecha":"2024-07-01","facturas":169,"lineas":221},{"fecha":"2024-08-01","facturas":156,"lineas":216},{"fecha":"2024-09-01","facturas":166,"lineas":253},{"fecha":"2024-10-01","facturas":192,"lineas":258},{"fecha":"2024-11-01","facturas":165,"lineas":225},{"fecha":"2024-12-01","facturas":161,"lineas":206},{"fecha":"2025-01-01","facturas":153,"lineas":214},{"fecha":"2025-02-01","facturas":110,"lineas":165},{"fecha":"2025-03-01","facturas":142,"lineas":191},{"fecha":"2025-04-01","facturas":132,"lineas":183},{"fecha":"2025-05-01","facturas":120,"lineas":157},{"fecha":"2025-06-01","facturas":102,"lineas":152},{"fecha":"2025-07-01","facturas":145,"lineas":212},{"fecha":"2025-08-01","facturas":103,"lineas":137},{"fecha":"2025-09-01","facturas":127,"lineas":165},{"fecha":"2025-10-01","facturas":104,"lineas":145},{"fecha":"2025-11-01","facturas":99,"lineas":129},{"fecha":"2025-12-01","facturas":113,"lineas":162},{"fecha":"2026-01-01","facturas":114,"lineas":152},{"fecha":"2026-02-01","facturas":97,"lineas":146},{"fecha":"2026-03-01","facturas":62,"lineas":82},{"fecha":"2026-04-01","facturas":87,"lineas":115}],"sectores":[{"sector":"Servicios Publicos","venta_neta":13664182886},{"sector":"Comercio","venta_neta":9365803347},{"sector":"Industria","venta_neta":8419317631},{"sector":"Hidrocarburo","venta_neta":8300544808},{"sector":"Quimico","venta_neta":6881884300},{"sector":"Construction","venta_neta":5096420389},{"sector":"Food","venta_neta":5071663944},{"sector":"Transporte y Logistica","venta_neta":4011920537}],"hist_total":712975769,"proy_total":167927437},"Todas":{"hist":[{"fecha":"2024-01-01","venta_neta":484984731.11},{"fecha":"2024-02-01","venta_neta":408871586.07},{"fecha":"2024-03-01","venta_neta":305393857.01},{"fecha":"2024-04-01","venta_neta":348371731.52},{"fecha":"2024-05-01","venta_neta":287872914.14},{"fecha":"2024-06-01","venta_neta":232626216.1},{"fecha":"2024-07-01","venta_neta":317803995.59},{"fecha":"2024-08-01","venta_neta":311132205.28},{"fecha":"2024-09-01","venta_neta":305311547.66},{"fecha":"2024-10-01","venta_neta":342815044.57},{"fecha":"2024-11-01","venta_neta":315384454.94},{"fecha":"2024-12-01","venta_neta":368019569.78},{"fecha":"2025-01-01","venta_neta":301430752.16},{"fecha":"2025-02-01","venta_neta":258407516.76},{"fecha":"2025-03-01","venta_neta":247449850.39},{"fecha":"2025-04-01","venta_neta":226741364.75},{"fecha":"2025-05-01","venta_neta":231698499.91},{"fecha":"2025-06-01","venta_neta":196423998.77},{"fecha":"2025-07-01","venta_neta":238102681.76},{"fecha":"2025-08-01","venta_neta":259953589.01},{"fecha":"2025-09-01","venta_neta":194548478.77},{"fecha":"2025-10-01","venta_neta":210782269.01},{"fecha":"2025-11-01","venta_neta":126919908.64},{"fecha":"2025-12-01","venta_neta":155909485.71},{"fecha":"2026-01-01","venta_neta":161640730.55},{"fecha":"2026-02-01","venta_neta":140176176.08},{"fecha":"2026-03-01","venta_neta":71626756.5},{"fecha":"2026-04-01","venta_neta":135953566.5}],"proy":[{"fecha":"2026-05-01","venta_neta":163948676.19},{"fecha":"2026-06-01","venta_neta":161458250.36},{"fecha":"2026-07-01","venta_neta":182999695.52},{"fecha":"2026-08-01","venta_neta":200655543.2},{"fecha":"2026-09-01","venta_neta":202391566.12},{"fecha":"2026-10-01","venta_neta":211344502.5}],"fl":[{"fecha":"2024-01-01","facturas":1080,"lineas":1608},{"fecha":"2024-02-01","facturas":1198,"lineas":1764},{"fecha":"2024-03-01","facturas":1073,"lineas":1597},{"fecha":"2024-04-01","facturas":1233,"lineas":1816},{"fecha":"2024-05-01","facturas":1111,"lineas":1687},{"fecha":"2024-06-01","facturas":950,"lineas":1384},{"fecha":"2024-07-01","facturas":1138,"lineas":1633},{"fecha":"2024-08-01","facturas":1025,"lineas":1512},{"fecha":"2024-09-01","facturas":1009,"lineas":1525},{"fecha":"2024-10-01","facturas":1139,"lineas":1723},{"fecha":"2024-11-01","facturas":1045,"lineas":1565},{"fecha":"2024-12-01","facturas":999,"lineas":1377},{"fecha":"2025-01-01","facturas":920,"lineas":1400},{"fecha":"2025-02-01","facturas":800,"lineas":1263},{"fecha":"2025-03-01","facturas":712,"lineas":1107},{"fecha":"2025-04-01","facturas":729,"lineas":1077},{"fecha":"2025-05-01","facturas":769,"lineas":1135},{"fecha":"2025-06-01","facturas":617,"lineas":898},{"fecha":"2025-07-01","facturas":819,"lineas":2046},{"fecha":"2025-08-01","facturas":669,"lineas":1056},{"fecha":"2025-09-01","facturas":680,"lineas":1006},{"fecha":"2025-10-01","facturas":726,"lineas":1081},{"fecha":"2025-11-01","facturas":551,"lineas":792},{"fecha":"2025-12-01","facturas":553,"lineas":787},{"fecha":"2026-01-01","facturas":567,"lineas":834},{"fecha":"2026-02-01","facturas":591,"lineas":884},{"fecha":"2026-03-01","facturas":312,"lineas":446},{"fecha":"2026-04-01","facturas":446,"lineas":701}],"sectores":[{"sector":"Comercio","venta_neta":135837634247},{"sector":"Food","venta_neta":96905281051},{"sector":"Mining","venta_neta":72233040143},{"sector":"Industria","venta_neta":68370691239},{"sector":"Quimico","venta_neta":45051939657},{"sector":"Hidrocarburo","venta_neta":29143298514},{"sector":"Servicios Publicos","venta_neta":27387339822},{"sector":"Construction","venta_neta":27257817814}],"hist_total":7186353479,"proy_total":1122798234}};
+
+// ── HELPERS ──
+const fmt = (v) => {
+  if (v == null || isNaN(v)) return '—';
+  const av = Math.abs(v);
+  if(av >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B';
+  if(av >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+  return '$' + v.toLocaleString('es-CO');
+};
+const fmtK = (v) => {
+  if(v >= 1e9) return (v/1e9).toFixed(1) + 'B';
+  if(v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  return v.toLocaleString();
+};
+const monthLabel = (fecha) => {
+  const d = new Date(fecha + 'T00:00:00');
+  return d.toLocaleDateString('es-CO', { month: 'short', year:'2-digit' });
+};
+const sucColors = ['#3b82f6','#00d4aa','#f59e0b','#ef4444','#a78bfa'];
+const secColors = ['#00d4aa','#3b82f6','#f59e0b','#ef4444','#a78bfa','#10b981','#f97316','#ec4899'];
+const ALL_SECS  = ['Medellín','Bogotá','Barranquilla','Cali','Cartagena'];
+
+// ── DATE & FOOTER ──
+document.getElementById('cur-date').textContent = new Date().toLocaleDateString('es-CO', {day:'numeric',month:'long',year:'numeric'});
+document.querySelector('footer').textContent = `Proyección de Ventas Analytics · Ciencia de Datos · ${new Date().toLocaleDateString('es-CO')} · Datos: output_powerbi/`;
+
+// ── CHART DEFAULTS ──
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = 'DM Mono, monospace';
+Chart.defaults.font.size = 10;
+Chart.defaults.responsive = true;
+Chart.defaults.maintainAspectRatio = false;
+
+// ── BUILD SERIE DATASETS from a data slice ──
+function buildSerieDatasets(ctx, d) {
+  const hist = d.hist, proy = d.proy;
+  const gradHist = ctx.createLinearGradient(0,0,0,250);
+  gradHist.addColorStop(0,'rgba(0,212,170,0.3)'); gradHist.addColorStop(1,'rgba(0,212,170,0)');
+  const gradProj = ctx.createLinearGradient(0,0,0,250);
+  gradProj.addColorStop(0,'rgba(167,139,250,0.3)'); gradProj.addColorStop(1,'rgba(167,139,250,0)');
+  const labels = [...hist.map(r=>monthLabel(r.fecha)), ...proy.map(r=>monthLabel(r.fecha))];
+  const histVals = [...hist.map(r=>r.venta_neta/1e6), ...Array(proy.length).fill(null)];
+  const projVals = [...Array(hist.length-1).fill(null), hist[hist.length-1].venta_neta/1e6, ...proy.map(r=>r.venta_neta/1e6)];
+  return { labels, histVals, projVals, gradHist, gradProj };
+}
+
+// ── INIT ALL CHARTS ──
+const ctxSerie = document.getElementById('chartSerie').getContext('2d');
+const initD = SUC_DATA['Todas'];
+const initSerie = buildSerieDatasets(ctxSerie, initD);
+
+const chartSerie = new Chart(ctxSerie, {
+  type:'line',
+  data:{
+    labels: initSerie.labels,
+    datasets:[
+      {label:'Histórico', data:initSerie.histVals, borderColor:'#00d4aa', backgroundColor:initSerie.gradHist, borderWidth:2, pointRadius:2, pointHoverRadius:5, tension:0.4, fill:true},
+      {label:'Proyección', data:initSerie.projVals, borderColor:'#a78bfa', backgroundColor:initSerie.gradProj, borderWidth:2, borderDash:[5,4], pointRadius:3, pointHoverRadius:6, tension:0.3, fill:true}
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw*1e6)}`}}},
+    scales:{
+      x:{grid:{color:'rgba(30,45,69,0.8)'},ticks:{maxRotation:45,maxTicksLimit:12}},
+      y:{grid:{color:'rgba(30,45,69,0.8)'},ticks:{callback:v=>v>=1000?`${(v/1000).toFixed(0)}B`:`${v}M`}}
+    }
+  }
+});
+
+// Forecast sucursal bar (always shows all sucursales, highlights selected)
+const chartFcSuc = new Chart(document.getElementById('chartFcSuc'), {
+  type:'bar',
+  data:{
+    labels: ALL_SECS,
+    datasets:[{
+      label:'Forecast 6M',
+      data: ALL_SECS.map(s=>SUC_DATA[s].proy_total/1e9),
+      backgroundColor: sucColors,
+      borderRadius:6, borderSkipped:false
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${fmt(ctx.raw*1e9)}`}}},
+    scales:{
+      x:{grid:{color:'rgba(30,45,69,0.8)'},ticks:{callback:v=>v.toFixed(0)+'B'}},
+      y:{grid:{display:false}}
+    }
+  }
+});
+
+// Sector list (rendered as HTML)
+function renderSectors(sectores) {
+  const secList = document.getElementById('sectorList');
+  const maxV = sectores[0].venta_neta;
+  secList.innerHTML = '';
+  sectores.forEach((s,i)=>{
+    const pct = (s.venta_neta/maxV*100).toFixed(0);
+    secList.innerHTML += `<div class="sector-row">
+      <div class="sector-name">${s.sector}</div>
+      <div class="sector-track"><div class="sector-fill" style="width:${pct}%;background:${secColors[i]}"></div></div>
+      <div class="sector-val">${fmtK(s.venta_neta)}</div>
+    </div>`;
+  });
+}
+renderSectors(initD.sectores);
+
+// Donut — shows distribution; when one sucursal selected, shows its share
+const chartSucPie = new Chart(document.getElementById('chartSucPie'), {
+  type:'doughnut',
+  data:{
+    labels: ALL_SECS,
+    datasets:[{data: ALL_SECS.map(s=>SUC_DATA[s].hist_total), backgroundColor:sucColors, borderWidth:2, borderColor:'#111827', hoverOffset:8}]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{position:'bottom', labels:{boxWidth:10,padding:14,color:'#94a3b8'}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.raw)}`}}
+    }
+  }
+});
+
+// Facturas chart
+const chartFacturas = new Chart(document.getElementById('chartFacturas'), {
+  type:'bar',
+  data:{
+    labels: initD.fl.map(r=>monthLabel(r.fecha)),
+    datasets:[
+      {label:'Facturas', data:initD.fl.map(r=>r.facturas), backgroundColor:'rgba(59,130,246,0.7)', borderRadius:3, borderSkipped:false},
+      {label:'Líneas',   data:initD.fl.map(r=>r.lineas),   backgroundColor:'rgba(0,212,170,0.4)',  borderRadius:3, borderSkipped:false}
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{position:'bottom',labels:{boxWidth:8,padding:10,color:'#94a3b8'}}},
+    scales:{
+      x:{grid:{color:'rgba(30,45,69,0.8)'},ticks:{maxRotation:45,maxTicksLimit:10}},
+      y:{grid:{color:'rgba(30,45,69,0.8)'}}
+    }
+  }
+});
+
+// Sucursal table
+function renderTable(suc) {
+  const tbody = document.getElementById('sucursalBody');
+  const rows = suc === 'Todas' ? ALL_SECS : [suc];
+  const maxH = Math.max(...rows.map(s=>SUC_DATA[s].hist_total));
+  tbody.innerHTML = '';
+  rows.forEach(s => {
+    const i = ALL_SECS.indexOf(s);
+    const hist = SUC_DATA[s].hist_total;
+    const fc   = SUC_DATA[s].proy_total;
+    const pct  = (hist/maxH*100).toFixed(0);
+    tbody.innerHTML += `<tr>
+      <td>
+        <div class="suc-name">${s}</div>
+        <div class="suc-bar-wrap"><div class="suc-bar" style="width:${pct}%;background:${sucColors[i]}"></div></div>
+      </td>
+      <td class="suc-val">${fmt(hist)}</td>
+      <td class="suc-val" style="color:var(--proj)">${fmt(fc)}</td>
+    </tr>`;
+  });
+}
+renderTable('Todas');
+
+// Stacked bar (all sucursales, shows one highlighted when filtered)
+function buildStackDatasets(suc) {
+  const labels = initD.hist.map(r => monthLabel(r.fecha));
+  if (suc === 'Todas') {
+    return { labels, datasets: ALL_SECS.map((s,i)=>({
+      label:s, data: SUC_DATA[s].hist.map(r=>r.venta_neta/1e6),
+      backgroundColor:sucColors[i]+'cc', borderColor:sucColors[i], borderWidth:0, borderRadius:2
+    }))};
+  } else {
+    const i = ALL_SECS.indexOf(suc);
+    return { labels: SUC_DATA[suc].hist.map(r=>monthLabel(r.fecha)),
+      datasets:[{label:suc, data:SUC_DATA[suc].hist.map(r=>r.venta_neta/1e6),
+        backgroundColor:sucColors[i]+'cc', borderColor:sucColors[i], borderWidth:0, borderRadius:2}]
+    };
+  }
+}
+const initStack = buildStackDatasets('Todas');
+const chartSucStack = new Chart(document.getElementById('chartSucStack'), {
+  type:'bar',
+  data:{ labels:initStack.labels, datasets:initStack.datasets },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{
+      legend:{position:'bottom',labels:{boxWidth:8,padding:10,color:'#94a3b8'}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.raw*1e6)}`}}
+    },
+    scales:{
+      x:{stacked:true, grid:{color:'rgba(30,45,69,0.8)'},ticks:{maxRotation:45,maxTicksLimit:12}},
+      y:{stacked:true, grid:{color:'rgba(30,45,69,0.8)'},ticks:{callback:v=>v+'M'}}
+    }
+  }
+});
+
+// ── UPDATE KPI CARDS ──
+function updateKPIs(suc) {
+  const d = SUC_DATA[suc];
+  const nextMonth = d.proy[0] ? d.proy[0].venta_neta : 0;
+  const fc6 = d.proy_total;
+  const histT = d.hist_total;
+  document.querySelectorAll('.kpi-value')[0].textContent = fmt(nextMonth);
+  document.querySelectorAll('.kpi-value')[1].textContent = fmt(fc6);
+  if (suc === 'Todas') {
+    document.querySelectorAll('.kpi-value')[2].textContent = 'Bogotá';
+    document.querySelectorAll('.kpi-sub')[2].textContent = `${fmt(SUC_DATA['Bogotá'].proy_total)} en forecast`;
+  } else {
+    document.querySelectorAll('.kpi-value')[2].textContent = suc;
+    document.querySelectorAll('.kpi-sub')[2].textContent = `${fmt(fc6)} en forecast`;
+  }
+}
+
+// ── MASTER FILTER FUNCTION ──
+function filterSuc(suc) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.textContent === suc));
+  document.title = suc === 'Todas' ? 'Proyección de Ventas — Tablero de Ventas & Forecast' : `Proyección de Ventas — ${suc}`;
+
+  const d = SUC_DATA[suc];
+
+  // 1. Serie temporal
+  const s = buildSerieDatasets(ctxSerie, d);
+  chartSerie.data.labels = s.labels;
+  chartSerie.data.datasets[0].data = s.histVals;
+  chartSerie.data.datasets[1].data = s.projVals;
+  chartSerie.update('active');
+
+  // 2. Forecast sucursal — highlight selected (dim others)
+  if (suc === 'Todas') {
+    chartFcSuc.data.datasets[0].backgroundColor = sucColors;
+  } else {
+    const idx = ALL_SECS.indexOf(suc);
+    chartFcSuc.data.datasets[0].backgroundColor = sucColors.map((c,i) => i===idx ? c : c+'44');
+  }
+  chartFcSuc.update('active');
+
+  // 3. Sectores
+  renderSectors(d.sectores);
+
+  // 4. Donut — highlight selected slice
+  if (suc === 'Todas') {
+    chartSucPie.data.datasets[0].backgroundColor = sucColors;
+  } else {
+    const idx = ALL_SECS.indexOf(suc);
+    chartSucPie.data.datasets[0].backgroundColor = sucColors.map((c,i) => i===idx ? c : c+'33');
+  }
+  chartSucPie.update('active');
+
+  // 5. Facturas
+  chartFacturas.data.labels = d.fl.map(r=>monthLabel(r.fecha));
+  chartFacturas.data.datasets[0].data = d.fl.map(r=>r.facturas);
+  chartFacturas.data.datasets[1].data = d.fl.map(r=>r.lineas);
+  chartFacturas.update('active');
+
+  // 6. Tabla
+  renderTable(suc);
+
+  // 7. Stacked bar
+  const sd = buildStackDatasets(suc);
+  chartSucStack.data.labels = sd.labels;
+  chartSucStack.data.datasets = sd.datasets;
+  chartSucStack.options.scales.x.stacked = (suc === 'Todas');
+  chartSucStack.options.scales.y.stacked = (suc === 'Todas');
+  chartSucStack.update('active');
+
+  // 8. KPIs
+  updateKPIs(suc);
+}
+</script>
+</body>
+</html>
